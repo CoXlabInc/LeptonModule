@@ -8,7 +8,7 @@ modification, are permitted provided that the following conditions are met:
 * Redistributions of source code must retain the above copyright notice, this
   list of conditions and the following disclaimer.
 
-* Redistributions in binary form must reproduce the above copyright notice,
+* Redistributions in binary form must reproduce the above copyright notice, 
   this list of conditions and the following disclaimer in the documentation
   and/or other materials provided with the distribution.
 
@@ -37,6 +37,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 #include "LEPTON_SDK.h"
 #include "LEPTON_SYS.h"
+#include "LEPTON_RAD.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -103,6 +104,7 @@ static void save_pgm_file(void)
 	unsigned int maxval = 0;
 	unsigned int minval = UINT_MAX;
 	char image_name[32];
+	char csv_name[32];
 	int image_index = 0;
 
 	do {
@@ -116,11 +118,19 @@ static void save_pgm_file(void)
 
 	} while (access(image_name, F_OK) == 0);
 
+	sprintf(csv_name, "IMG_%.4d.csv", image_index - 1);
+
 	FILE *f = fopen(image_name, "w");
 	if (f == NULL)
 	{
 		printf("Error opening file!\n");
 		exit(1);
+	}
+
+	FILE *f_csv = fopen(csv_name, "w");
+	if (f_csv == NULL)
+	{
+		printf("Error opening CSV file!\n");
 	}
 
 	printf("Calculating min/max values for proper scaling...\n");
@@ -144,13 +154,20 @@ static void save_pgm_file(void)
 	{
 		for(j=0;j<lepton_width;j++)
 		{
-			fprintf(f,"%d ", lepton_image[i][j] - minval);
+			fprintf(f,"%d ", lepton_image[i][j] - minval); 
+			
+			if (f_csv) {
+				float temp = (lepton_image[i][j] - 27315) / 100.0f;
+				fprintf(f_csv, "%.2f%s", temp, (j == lepton_width - 1) ? "" : ",");
+			}
 		}
 		fprintf(f,"\n");
+		if (f_csv) fprintf(f_csv, "\n");
 	}
 	fprintf(f,"\n\n");
 
 	fclose(f);
+	if (f_csv) fclose(f_csv);
 }
 
 // This function is now responsible for populating the lepton_image from the shelf buffer
@@ -326,6 +343,14 @@ int main(int argc, char *argv[])
 	if (lres != LEP_OK) {
 		printf("I2C port open failed: %d\n", lres);
 	} else {
+		printf("Enabling T-Linear Radiometry mode...\n");
+		lres = LEP_SetRadTLinearEnableState(&port_desc, LEP_RAD_ENABLE);
+		if (lres != LEP_OK) {
+			printf("Failed to enable T-Linear mode: %d. (This is expected for non-radiometric Leptons)\n", lres);
+		} else {
+			printf("T-Linear mode enabled.\n");
+		}
+
 		printf("Performing FFC...\n");
 		lres = LEP_RunSysFFCNormalization(&port_desc);
 		if (lres != LEP_OK) {
